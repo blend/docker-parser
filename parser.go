@@ -1,6 +1,6 @@
-// Package parser implements a parser and parse tree dumper for Dockerfiles.
 package parser
 
+// Package parser implements a parser and parse tree dumper for Dockerfiles.
 import (
 	"bufio"
 	"bytes"
@@ -80,12 +80,11 @@ type Heredoc struct {
 }
 
 var (
-	dispatch      map[string]func(string, *directives) (*Node, map[string]bool, error)
-	reWhitespace  = regexp.MustCompile(`[\t\v\f\r ]+`)
-	reDirectives  = regexp.MustCompile(`^#\s*([a-zA-Z][a-zA-Z0-9]*)\s*=\s*(.+?)\s*$`)
-	reComment     = regexp.MustCompile(`^#.*$`)
-	reHeredoc     = regexp.MustCompile(`^(\d*)<<(-?)([^<]*)$`)
-	reLeadingTabs = regexp.MustCompile(`(?m)^\t+`)
+	dispatch     map[string]func(string, *directives) (*Node, map[string]bool, error)
+	reWhitespace = regexp.MustCompile(`[\t\v\f\r ]+`)
+	reDirectives = regexp.MustCompile(`^#\s*([a-zA-Z][a-zA-Z0-9]*)\s*=\s*(.+?)\s*$`)
+	reComment    = regexp.MustCompile(`^#.*$`)
+	reHeredoc    = regexp.MustCompile(`^(\d*)<<(-?)([^<]*)$`)
 )
 
 // DefaultEscapeToken is the default escape token
@@ -174,10 +173,33 @@ func newDefaultDirectives() *directives {
 	return d
 }
 
-// ignore the current argument. This will still leave a command parsed, but
-// will not incorporate the arguments into the ast.
-func parseIgnore(rest string, d *directives) (*Node, map[string]bool, error) {
-	return &Node{}, nil, nil
+func init() {
+	// Dispatch Table. see line_parsers.go for the parse functions.
+	// The command is parsed and mapped to the line parser. The line parser
+	// receives the arguments but not the command, and returns an AST after
+	// reformulating the arguments according to the rules in the parser
+	// functions. Errors are propagated up by Parse() and the resulting AST can
+	// be incorporated directly into the existing AST as a next.
+	dispatch = map[string]func(string, *directives) (*Node, map[string]bool, error){
+		Add:         parseMaybeJSONToList,
+		Arg:         parseNameOrNameVal,
+		Cmd:         parseMaybeJSON,
+		Copy:        parseMaybeJSONToList,
+		Entrypoint:  parseMaybeJSON,
+		Env:         parseEnv,
+		Expose:      parseStringsWhitespaceDelimited,
+		From:        parseStringsWhitespaceDelimited,
+		Healthcheck: parseHealthConfig,
+		Label:       parseLabel,
+		Maintainer:  parseString,
+		Onbuild:     parseSubCommand,
+		Run:         parseMaybeJSON,
+		Shell:       parseMaybeJSON,
+		StopSignal:  parseString,
+		User:        parseString,
+		Volume:      parseMaybeJSONToList,
+		Workdir:     parseString,
+	}
 }
 
 // newNodeFromLine splits the line into parts, and dispatches to a function
